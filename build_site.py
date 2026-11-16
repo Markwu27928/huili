@@ -35,6 +35,10 @@ def build_data() -> dict:
                              _int(r["buy_lots"]), _int(r["sell_lots"])])
         days.append({"d": p.stem, "r": rows})
     return {
+        # 資料約定（其他網頁，例如 twse-fundamentals，會讀這個檔案）：
+        #   version 1：days[].r 每列為 [代號, 買進金額, 賣出金額, 買進張數, 賣出張數]，金額單位仟元，
+        #   張數可能為 null；每天只含買超、賣超各前 50 名（未上榜不代表沒有交易）
+        "version": 1, "unit": "仟元", "top_n": 50,
         "branch": "永豐金-匯立", "code": "9A81",
         "generated": dt.datetime.now(TW).strftime("%Y-%m-%dT%H:%M"),
         "names": names, "days": days,
