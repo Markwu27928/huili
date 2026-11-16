@@ -164,10 +164,10 @@ h1 .code{font-weight:500;color:var(--muted);font-size:15px;margin-left:6px}
 .net b{color:var(--ink)}
 
 /* 分頁 */
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:14px 0 10px;
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;margin:14px 0 10px;
   background:var(--line);padding:4px;border-radius:12px}
-.tabs button{border:0;background:transparent;padding:8px 0;border-radius:9px;
-  font-weight:600;color:var(--muted);cursor:pointer}
+.tabs button{border:0;background:transparent;padding:8px 0;border-radius:9px;font-size:15px;
+  font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
 .tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);
   box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .tools{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
@@ -200,6 +200,39 @@ h1 .code{font-weight:500;color:var(--muted);font-size:15px;margin-left:6px}
 .msg{padding:40px 8px;text-align:center;color:var(--muted)}
 .msg b{display:block;color:var(--ink);margin-bottom:6px;font-size:17px}
 .foot{font-size:12px;color:var(--muted);margin-top:18px}
+
+/* 每日表、統計表 */
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;
+  padding:5px 12px;font-size:14px;cursor:pointer}
+.seg button[aria-pressed="true"]{border-color:var(--ink);font-weight:700}
+.tbl-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  font-size:13px;color:var(--muted);margin:8px 0 4px}
+.link-btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;
+  padding:5px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+.link-btn.more{display:block;width:100%;margin-top:12px;padding:10px;font-size:14px}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 4px}
+.stat3 div{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:8px 4px;text-align:center}
+.stat3 span{display:block;font-size:12px;color:var(--muted)}
+.stat3 strong{font-size:15px;white-space:nowrap}
+.dt{table-layout:fixed;font-size:13px}
+.dt th{padding:0;border-bottom:1px solid var(--line)}
+.dt th button{width:100%;border:0;background:transparent;padding:8px 0;font-size:12px;
+  color:var(--muted);text-align:right;cursor:pointer;white-space:nowrap}
+.dt th:first-child button{text-align:left}
+.dt th[aria-sort] button{color:var(--ink);font-weight:700}
+.dt td{padding:9px 0;vertical-align:middle;white-space:nowrap}
+.dt td:first-child{white-space:normal;overflow:hidden}
+.dt tbody tr{cursor:pointer}
+.dt tbody tr:active{background:var(--line)}
+.dt .nm{display:block;font-size:14px}
+.dt .cd{display:block;font-size:12px}
+.dt tfoot td{font-weight:700;font-size:12px;border-top:2px solid var(--line)}
+.star{color:#D9A400;margin-left:3px;font-size:13px}
+.wbtn{display:block;width:100%;margin-top:10px;padding:11px;border-radius:12px;
+  border:1px solid var(--line);background:transparent;font-weight:600;cursor:pointer}
+.wbtn[aria-pressed="true"]{border-color:#D9A400}
 
 /* 個股明細 */
 dialog{border:0;padding:0;width:100%;max-width:560px;margin:auto auto 0;
@@ -262,6 +295,8 @@ td{text-align:right;padding:6px 0;border-top:1px solid var(--line)}
     <button role="tab" data-tab="buy">買超</button>
     <button role="tab" data-tab="sell">賣超</button>
     <button role="tab" data-tab="cum">累計</button>
+    <button role="tab" data-tab="daily">每日表</button>
+    <button role="tab" data-tab="stats">統計表</button>
   </div>
   <div class="tools">
     <div class="chips" id="chips" hidden>
@@ -287,9 +322,14 @@ td{text-align:right;padding:6px 0;border-top:1px solid var(--line)}
 
 <script>
 const $ = s => document.querySelector(s);
-const S = {names:{}, dates:[], days:[], idx:-1, tab:'buy', n:5, q:'', loadedAt:0, generated:''};
-try { const t = localStorage.getItem('huili.tab'); if (['buy','sell','cum'].includes(t)) S.tab = t;
-      const n = +localStorage.getItem('huili.n'); if ([5,10,20].includes(n)) S.n = n; } catch(e) {}
+const S = {names:{}, dates:[], days:[], idx:-1, tab:'buy', n:5, q:'', loadedAt:0, generated:'',
+  sp:5, limit:100, watch:new Set(),
+  f:{daily:'all', stats:'all'}, sort:{daily:{k:'d', dir:-1}, stats:{k:'sum', dir:-1}}};
+try { const t = localStorage.getItem('huili.tab'); if (['buy','sell','cum','daily','stats'].includes(t)) S.tab = t;
+      const n = +localStorage.getItem('huili.n'); if ([5,10,20].includes(n)) S.n = n;
+      const sp = localStorage.getItem('huili.sp'); if (sp !== null && [0,5,10,20].includes(+sp)) S.sp = +sp;
+      const w = JSON.parse(localStorage.getItem('huili.watch') || '[]');
+      if (Array.isArray(w)) S.watch = new Set(w.map(String)); } catch(e) {}
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // 金額單位：仟元
@@ -380,7 +420,8 @@ function render(){
   const net = sb + ss;
   $('#net').innerHTML = '榜上淨' + (net >= 0 ? '買超' : '賣超') + ' <b class="' + (net >= 0 ? 'up-t' : 'down-t') + '">' + money(net) + '</b>';
 
-  $('#list').innerHTML = S.tab === 'cum' ? cumHTML() : dayHTML(S.tab === 'buy' ? 1 : -1);
+  $('#list').innerHTML = S.tab === 'cum' ? cumHTML() : S.tab === 'daily' ? dailyHTML() :
+    S.tab === 'stats' ? statsHTML() : dayHTML(S.tab === 'buy' ? 1 : -1);
   const g = S.generated ? S.generated.replace('T', ' ').slice(5) : '';
   $('#foot').textContent = '資料日期 ' + fmtDate(d) + (g ? '，網頁更新於 ' + g : '') +
     '。只含每日買超、賣超各前 50 名；均價為金額除以張數的估算值。資料來源：MoneyDJ 券商分點進出。';
@@ -440,6 +481,159 @@ function cumHTML(){
   return note + (html || '<div class="msg">找不到符合的股票</div>');
 }
 
+// ---------- 每日表、統計表
+const sum = a => a.reduce((x, y) => x + y, 0);
+const moneyOr = v => v ? money(v) : '—';
+const slots = v => v == null ? '' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toLocaleString('zh-TW');
+const cmp = (a, b, dir) => a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : (a < b ? -1 : a > b ? 1 : 0) * dir;
+const FILTERS = [['all','全部'], ['buy','買超'], ['sell','賣超'], ['watch','關注']];
+const PERIODS = [[5,'5 日'], [10,'10 日'], [20,'20 日'], [0,'全部']];
+const watchLabel = c => S.watch.has(c) ? '★ 已關注，再按一次取消' : '☆ 加入關注';
+const starHTML = c => S.watch.has(c) ? '<span class="star" aria-label="已關注">★</span>' : '';
+
+function passF(f, code, v){
+  if (f === 'buy') return v > 0;
+  if (f === 'sell') return v < 0;
+  if (f === 'watch') return S.watch.has(code);
+  return true;
+}
+function emptyMsg(f){
+  if (S.q) return '<div class="msg">找不到符合的股票</div>';
+  if (f === 'watch') return S.watch.size
+    ? '<div class="msg"><b>關注的股票都沒有進榜</b>換一天或拉長統計期間看看。</div>'
+    : '<div class="msg"><b>還沒有關注的股票</b>點任一檔股票，在明細最下方按「加入關注」。</div>';
+  return '<div class="msg">沒有符合的資料</div>';
+}
+function chipsHTML(attr, items, cur){
+  return '<div class="seg">' + items.map(([v, label]) =>
+    '<button data-' + attr + '="' + v + '" aria-pressed="' + (String(cur) === String(v)) + '">' + label + '</button>').join('') + '</div>';
+}
+function thHTML(tab, k, label){
+  const s = S.sort[tab], on = s.k === k;
+  return '<th' + (on ? ' aria-sort="' + (s.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '><button data-sort="' + k + '">' +
+    label + (on ? (s.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
+}
+function nameCell(c){
+  return '<td><span class="nm">' + esc(S.names[c] || c) + starHTML(c) + '</span><span class="cd">' + esc(c) + '</span></td>';
+}
+const signCls = v => v > 0 ? 'up-t' : v < 0 ? 'down-t' : '';
+
+function dailyRows(){
+  const f = S.f.daily, s = S.sort.daily;
+  const key = {name: r => r.c, b: r => r.b, s: r => r.s, d: r => r.d, dl: r => r.dl}[s.k];
+  const all = [...S.days[S.idx].entries()].map(([c, r]) => ({c, ...r}));
+  const rows = all.filter(r => passF(f, r.c, r.d) && match(r.c))
+    .sort((a, b) => cmp(key(a), key(b), s.dir) || b.d - a.d);
+  return {all, rows};
+}
+
+function dailyHTML(){
+  const {all, rows} = dailyRows();
+  const nb = all.filter(r => r.d > 0).length;
+  let html = chipsHTML('f', FILTERS, S.f.daily) +
+    '<div class="tbl-meta"><span>買超 ' + nb + ' 檔　賣超 ' + (all.length - nb) + ' 檔</span>' +
+    '<button class="link-btn" data-act="csv">匯出 CSV</button></div>';
+  if (!rows.length) return html + emptyMsg(S.f.daily);
+  const tb = sum(rows.map(r => r.b)), ts = sum(rows.map(r => r.s)), td = tb - ts;
+  const dls = rows.filter(r => r.dl != null);
+  const tl = dls.length ? sum(dls.map(r => r.dl)) : null;
+  html += '<table class="dt num"><colgroup><col style="width:27%"><col style="width:17%"><col style="width:17%"><col style="width:19%"><col style="width:20%"></colgroup>' +
+    '<thead><tr>' + thHTML('daily', 'name', '股票') + thHTML('daily', 'b', '買進') + thHTML('daily', 's', '賣出') +
+    thHTML('daily', 'd', '差額') + thHTML('daily', 'dl', '張數') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr class="trow" data-code="' + esc(r.c) + '">' + nameCell(r.c) +
+      '<td>' + moneyOr(r.b) + '</td><td>' + moneyOr(r.s) + '</td>' +
+      '<td class="' + signCls(r.d) + '"><b>' + money(r.d, true) + '</b></td><td>' + slots(r.dl) + '</td></tr>').join('') +
+    '</tbody><tfoot><tr><td>合計 ' + rows.length + ' 檔</td><td>' + money(tb) + '</td><td>' + money(ts) + '</td>' +
+    '<td class="' + signCls(td) + '">' + money(td, true) + '</td><td>' + slots(tl) + '</td></tr></tfoot></table>';
+  return html;
+}
+
+function stat(i, n){
+  const from = n ? Math.max(0, i - n + 1) : 0;
+  const m = new Map();
+  for (let j = from; j <= i; j++)
+    for (const [c, r] of S.days[j]) {
+      const a = m.get(c) || {code:c, sum:0, b:0, s:0, bd:0, sd:0, dl:null};
+      a.sum += r.d; a.b += r.b; a.s += r.s;
+      if (r.d > 0) a.bd++; else if (r.d < 0) a.sd++;
+      if (r.dl != null) a.dl = (a.dl || 0) + r.dl;
+      m.set(c, a);
+    }
+  const today = S.days[i];
+  for (const a of m.values()) {
+    const t = today.get(a.code);
+    a.days = a.bd + a.sd;
+    a.streak = !t ? 0 : t.d > 0 ? streak(a.code, i, 1) : -streak(a.code, i, -1);
+  }
+  return {from, all:[...m.values()]};
+}
+
+function statRows(){
+  const f = S.f.stats, s = S.sort.stats;
+  const key = {name: a => a.code, sum: a => a.sum, days: a => a.days, streak: a => a.streak}[s.k];
+  const st = stat(S.idx, S.sp);
+  const rows = st.all.filter(a => passF(f, a.code, a.sum) && match(a.code))
+    .sort((a, b) => cmp(key(a), key(b), s.dir) || b.sum - a.sum);
+  return {...st, rows};
+}
+
+function statsHTML(){
+  const {from, all, rows} = statRows();
+  const buys = all.filter(a => a.sum > 0), sells = all.filter(a => a.sum < 0);
+  const nd = S.idx - from + 1;
+  let html = chipsHTML('sp', PERIODS, S.sp) + chipsHTML('f', FILTERS, S.f.stats) +
+    '<div class="stat3"><div><span>交易日</span><strong class="num">' + nd + ' 日</strong></div>' +
+    '<div><span>淨買超 ' + buys.length + ' 檔</span><strong class="num up-t">' + money(sum(buys.map(a => a.sum)), true) + '</strong></div>' +
+    '<div><span>淨賣超 ' + sells.length + ' 檔</span><strong class="num down-t">' + money(sum(sells.map(a => a.sum)), true) + '</strong></div></div>' +
+    '<div class="tbl-meta"><span>' + fmtDate(S.dates[from], 1) + ' 至 ' + fmtDate(S.dates[S.idx], 1) + '</span>' +
+    '<button class="link-btn" data-act="csv">匯出 CSV</button></div>';
+  if (!rows.length) return html + emptyMsg(S.f.stats);
+  const shown = rows.slice(0, S.limit);
+  html += '<table class="dt num"><colgroup><col style="width:34%"><col style="width:26%"><col style="width:20%"><col style="width:20%"></colgroup>' +
+    '<thead><tr>' + thHTML('stats', 'name', '股票') + thHTML('stats', 'sum', '累計差額') +
+    thHTML('stats', 'days', '買/賣天') + thHTML('stats', 'streak', '連續') + '</tr></thead><tbody>' +
+    shown.map(a => '<tr class="trow" data-code="' + esc(a.code) + '">' + nameCell(a.code) +
+      '<td class="' + signCls(a.sum) + '"><b>' + money(a.sum, true) + '</b></td>' +
+      '<td>' + a.bd + ' / ' + a.sd + '</td>' +
+      '<td class="' + signCls(a.streak) + '">' + (a.streak > 0 ? '買' + a.streak + '日' : a.streak < 0 ? '賣' + (-a.streak) + '日' : '—') + '</td></tr>').join('') +
+    '</tbody><tfoot><tr><td>合計 ' + rows.length + ' 檔</td><td class="' + signCls(sum(rows.map(a => a.sum))) + '">' +
+    money(sum(rows.map(a => a.sum)), true) + '</td><td></td><td></td></tr></tfoot></table>';
+  if (rows.length > shown.length)
+    html += '<button class="link-btn more" data-act="more">顯示全部 ' + rows.length + ' 檔（目前 ' + shown.length + ' 檔）</button>';
+  return html;
+}
+
+function csvDownload(name, head, rows){
+  const q = v => { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const text = '﻿' + [head, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([text], {type:'text/csv;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+function exportCSV(){
+  const d = S.dates[S.idx];
+  if (S.tab === 'daily') {
+    csvDownload('huili_daily_' + d + '.csv',
+      ['代號','名稱','買進金額(仟元)','賣出金額(仟元)','差額(仟元)','買進張數','賣出張數','差額張數'],
+      dailyRows().rows.map(r => [r.c, S.names[r.c] || '', r.b, r.s, r.d, r.bl, r.sl, r.dl]));
+  } else if (S.tab === 'stats') {
+    csvDownload('huili_stats_' + d + '_' + (S.sp || 'all') + '.csv',
+      ['代號','名稱','累計差額(仟元)','買進合計(仟元)','賣出合計(仟元)','買超天數','賣超天數','目前連續(正買負賣)','累計張數差'],
+      statRows().rows.map(a => [a.code, S.names[a.code] || '', a.sum, a.b, a.s, a.bd, a.sd, a.streak, a.dl]));
+  }
+}
+function toggleWatch(code){
+  if (S.watch.has(code)) S.watch.delete(code); else S.watch.add(code);
+  try { localStorage.setItem('huili.watch', JSON.stringify([...S.watch])); } catch (_) {}
+}
+function setSort(k){
+  const s = S.sort[S.tab];
+  if (s.k === k) s.dir = -s.dir; else { s.k = k; s.dir = k === 'name' ? 1 : -1; }
+  render();
+}
+
 function openSheet(code){
   const i0 = Math.max(0, S.idx - 19), span = [];
   for (let j = i0; j <= S.idx; j++) span.push([S.dates[j], S.days[j].get(code)]);
@@ -478,7 +672,8 @@ function openSheet(code){
     '<div class="stats">' + cell('連續', stTxt, sign > 0 ? 'up-t' : sign < 0 ? 'down-t' : '') +
     cell('5日', c5, k5) + cell('10日', c10, k10) + cell('20日', c20, k20) + '</div>' + svg +
     '<table class="num"><thead><tr><th>日期</th><th>差額</th><th>張數</th><th>均價</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<a class="ext" href="https://tw.stock.yahoo.com/quote/' + encodeURIComponent(code) + '" target="_blank" rel="noopener">在 Yahoo 股市查看 ' + esc(code) + '</a>';
+    '<a class="ext" href="https://tw.stock.yahoo.com/quote/' + encodeURIComponent(code) + '" target="_blank" rel="noopener">在 Yahoo 股市查看 ' + esc(code) + '</a>' +
+    '<button class="wbtn" data-watch="' + esc(code) + '" aria-pressed="' + S.watch.has(code) + '">' + watchLabel(code) + '</button>';
   const dlg = $('#sheet');
   if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
 }
@@ -486,7 +681,7 @@ function openSheet(code){
 // 事件
 document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  S.tab = b.dataset.tab; try { localStorage.setItem('huili.tab', S.tab); } catch (_) {}
+  S.tab = b.dataset.tab; S.limit = 100; try { localStorage.setItem('huili.tab', S.tab); } catch (_) {}
   render();
 });
 $('#chips').addEventListener('click', e => {
@@ -494,12 +689,29 @@ $('#chips').addEventListener('click', e => {
   S.n = +b.dataset.n; try { localStorage.setItem('huili.n', S.n); } catch (_) {}
   render();
 });
-$('#q').addEventListener('input', e => { S.q = e.target.value.trim(); render(); });
+$('#q').addEventListener('input', e => { S.q = e.target.value.trim(); S.limit = 100; render(); });
 $('#prev').addEventListener('click', () => { if (S.idx > 0) { S.idx--; render(); } });
 $('#next').addEventListener('click', () => { if (S.idx < S.dates.length - 1) { S.idx++; render(); } });
 $('#dateSel').addEventListener('change', e => { S.idx = +e.target.value; render(); });
 $('#refresh').addEventListener('click', load);
-$('#list').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) openSheet(r.dataset.code); });
+$('#list').addEventListener('click', e => {
+  const t = e.target;
+  const r = t.closest('.row, .trow'); if (r) return openSheet(r.dataset.code);
+  const so = t.closest('[data-sort]'); if (so) return setSort(so.dataset.sort);
+  const f = t.closest('[data-f]'); if (f) { S.f[S.tab] = f.dataset.f; S.limit = 100; return render(); }
+  const sp = t.closest('[data-sp]');
+  if (sp) { S.sp = +sp.dataset.sp; S.limit = 100; try { localStorage.setItem('huili.sp', S.sp); } catch (_) {} return render(); }
+  const ac = t.closest('[data-act]');
+  if (ac && ac.dataset.act === 'csv') exportCSV();
+  if (ac && ac.dataset.act === 'more') { S.limit = Infinity; render(); }
+});
+$('#sheetBody').addEventListener('click', e => {
+  const w = e.target.closest('[data-watch]'); if (!w) return;
+  toggleWatch(w.dataset.watch);
+  w.textContent = watchLabel(w.dataset.watch);
+  w.setAttribute('aria-pressed', S.watch.has(w.dataset.watch));
+  render();
+});
 $('#close').addEventListener('click', () => $('#sheet').close());
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') e.target.close(); });
 document.addEventListener('visibilitychange', () => {
